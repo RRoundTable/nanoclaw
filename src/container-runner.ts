@@ -2,7 +2,7 @@
  * Container Runner for NanoClaw
  * Spawns agent execution in containers and handles IPC
  */
-import { ChildProcess, exec, spawn } from 'child_process';
+import { ChildProcess, exec, execSync, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -24,6 +24,7 @@ import {
   hostGatewayArgs,
   readonlyMountArgs,
   stopContainer,
+  useHostNetwork,
 } from './container-runtime.js';
 import { detectAuthMode } from './credential-proxy.js';
 import { validateAdditionalMounts } from './mount-security.js';
@@ -209,22 +210,42 @@ function buildVolumeMounts(
     mounts.push(...validatedMounts);
   }
 
+  // Docker socket mount for groups with dockerAccess enabled
+  if (group.containerConfig?.dockerAccess) {
+    const dockerSock = '/var/run/docker.sock';
+    if (fs.existsSync(dockerSock)) {
+      mounts.push({
+        hostPath: dockerSock,
+        containerPath: '/var/run/docker.sock',
+        readonly: false,
+      });
+    }
+  }
+
   return mounts;
 }
 
 function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
+  containerConfig?: RegisteredGroup['containerConfig'],
 ): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
+
+  const hostNetwork = useHostNetwork();
+  if (hostNetwork) {
+    args.push('--network', 'host');
+  }
 
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
 
   // Route API traffic through the credential proxy (containers never see real secrets)
+  // With --network host, localhost works directly; otherwise use the host gateway
+  const proxyHost = hostNetwork ? 'localhost' : CONTAINER_HOST_GATEWAY;
   args.push(
     '-e',
-    `ANTHROPIC_BASE_URL=http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}`,
+    `ANTHROPIC_BASE_URL=http://${proxyHost}:${CREDENTIAL_PROXY_PORT}`,
   );
 
   // Mirror the host's auth method with a placeholder value.
@@ -238,8 +259,10 @@ function buildContainerArgs(
     args.push('-e', 'CLAUDE_CODE_OAUTH_TOKEN=placeholder');
   }
 
-  // Runtime-specific args for host gateway resolution
-  args.push(...hostGatewayArgs());
+  // Runtime-specific args for host gateway resolution (not needed with --network host)
+  if (!hostNetwork) {
+    args.push(...hostGatewayArgs());
+  }
 
   // Run as host user so bind-mounted files are accessible.
   // Skip when running as root (uid 0), as the container's node user (uid 1000),
@@ -249,6 +272,21 @@ function buildContainerArgs(
   if (hostUid != null && hostUid !== 0 && hostUid !== 1000) {
     args.push('--user', `${hostUid}:${hostGid}`);
     args.push('-e', 'HOME=/home/node');
+  }
+
+  // Add docker group so the container process can access the docker socket
+  if (containerConfig?.dockerAccess) {
+    try {
+      const dockerGid = execSync('getent group docker | cut -d: -f3', {
+        encoding: 'utf-8',
+        timeout: 5000,
+      }).trim();
+      if (dockerGid) {
+        args.push('--group-add', dockerGid);
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Failed to resolve docker group ID');
+    }
   }
 
   for (const mount of mounts) {
@@ -278,7 +316,7 @@ export async function runContainerAgent(
   const mounts = buildVolumeMounts(group, input.isMain);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
-  const containerArgs = buildContainerArgs(mounts, containerName);
+  const containerArgs = buildContainerArgs(mounts, containerName, group.containerConfig);
 
   logger.debug(
     {

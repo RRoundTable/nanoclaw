@@ -432,13 +432,15 @@ export async function processTaskIpc(
           );
           break;
         }
-        // Defense in depth: agent cannot set isMain via IPC
+        // Defense in depth: agent cannot set isMain or dockerAccess via IPC
         deps.registerGroup(data.jid, {
           name: data.name,
           folder: data.folder,
           trigger: data.trigger,
           added_at: new Date().toISOString(),
-          containerConfig: data.containerConfig,
+          containerConfig: data.containerConfig
+            ? { ...data.containerConfig, dockerAccess: undefined }
+            : undefined,
           requiresTrigger: data.requiresTrigger,
         });
       } else {

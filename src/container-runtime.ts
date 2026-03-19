@@ -49,6 +49,20 @@ export function hostGatewayArgs(): string[] {
   return [];
 }
 
+/**
+ * Whether to use --network host mode.
+ * On bare-metal Linux, iptables often blocks container→host traffic on the
+ * docker0 bridge. --network host bypasses this while keeping filesystem
+ * isolation via bind mounts. macOS/WSL use Docker Desktop's VM routing
+ * which doesn't have this issue.
+ */
+export function useHostNetwork(): boolean {
+  if (process.env.CONTAINER_NETWORK_HOST === '0') return false;
+  if (os.platform() !== 'linux') return false;
+  if (fs.existsSync('/proc/sys/fs/binfmt_misc/WSLInterop')) return false;
+  return true;
+}
+
 /** Returns CLI args for a readonly bind mount. */
 export function readonlyMountArgs(
   hostPath: string,
