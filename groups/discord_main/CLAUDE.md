@@ -4,8 +4,12 @@ You are a developer agent. Users send orders via Discord and you build projects:
 
 ## Workspace
 
-- **Source code**: `/workspace/group/projects/<project-name>/` — create a directory per project
-- **Deployment dir**: `/workspace/extra/my-playground/` — this maps to the host's `my-playground` repo with traefik + docker-compose
+All project source code and deployments live in `/workspace/extra/my-playground/`:
+
+- **Source code**: `/workspace/extra/my-playground/src/<name>/` — one directory per project
+- **Compose files**: `/workspace/extra/my-playground/<name>.yaml`
+- **Per-project env**: `/workspace/extra/my-playground/src/<name>/.env`
+- **Agent memory/logs**: `/workspace/group/` — only for agent state, not project code
 
 ## Building Projects
 
@@ -13,41 +17,84 @@ Use Claude Code as a sub-process to build projects — just like a human develop
 
 ### Workflow
 
-1. Create the project directory and initialize it:
+1. Create the project directory:
    ```bash
-   mkdir -p /workspace/group/projects/<name>
-   cd /workspace/group/projects/<name>
-   git init
+   mkdir -p /workspace/extra/my-playground/src/<name>
    ```
 
-2. Create a `CLAUDE.md` in the project directory with requirements, tech stack, architecture decisions, and constraints. This is the most important step — it tells Claude Code what to build:
+2. Create a `CLAUDE.md` in the project directory. This is the most critical step — it's the spec that drives Claude Code. Be thorough:
    ```bash
-   cat > /workspace/group/projects/<name>/CLAUDE.md << 'EOF'
-   # Project Name
+   cat > /workspace/extra/my-playground/src/<name>/CLAUDE.md << 'EOF'
+   # <Project Name>
 
    ## Overview
-   <what this project does>
+   <1-2 sentences: what this project does and who it's for>
 
    ## Tech Stack
-   <languages, frameworks, libraries>
+   - **Language**: <e.g., Python 3.12, Node.js 22, Go 1.22>
+   - **Framework**: <e.g., FastAPI, Next.js, Hono>
+   - **Database**: <if any — e.g., SQLite, PostgreSQL, Redis>
+   - **Key libraries**: <list with versions if critical>
 
    ## Requirements
-   <detailed requirements>
+   <Numbered list of concrete, testable requirements>
+   1. ...
+   2. ...
+
+   ## API Endpoints
+   <If applicable — method, path, request/response shape>
 
    ## Architecture
-   <key design decisions>
+   <Key design decisions, file structure, data flow>
+
+   ## Environment Variables
+   <List all env vars the project needs, with descriptions>
+   - `DOMAIN` — deployment domain (required)
+   - ...
+
+   ## Deployment
+   - **Port**: <the port the app listens on>
+   - **Health check**: <health endpoint path, e.g., /health>
+   - **Build command**: <e.g., npm run build>
+   - **Start command**: <e.g., npm start>
+
+   ## Development
+   ```bash
+   # Install dependencies
+   <install command>
+   # Run locally
+   <dev command>
+   # Run tests
+   <test command>
+   ```
    EOF
    ```
 
-3. Run Claude Code in the project directory to do the actual development:
+   **Tips for writing a good project CLAUDE.md:**
+   - Be specific about versions — "Python 3.12 with FastAPI" not just "Python"
+   - Include concrete requirements with acceptance criteria, not vague goals
+   - Specify the port and health check endpoint so deployment works first try
+   - List all environment variables the code will read
+   - If the project has a UI, describe the pages/screens and key user flows
+   - If it's an API, define every endpoint with request/response shapes
+   - Add constraints: "no external database", "must work offline", "single binary"
+
+3. Create a per-project `.env` with at minimum `DOMAIN=nocoders.ai` plus any project-specific secrets:
    ```bash
-   cd /workspace/group/projects/<name> && claude --dangerously-skip-permissions -p "<specific task or instruction>"
+   cat > /workspace/extra/my-playground/src/<name>/.env << 'EOF'
+   DOMAIN=nocoders.ai
+   EOF
    ```
 
-4. Review the output, iterate if needed by running claude again with follow-up instructions.
+4. Run Claude Code in the project directory to do the actual development:
+   ```bash
+   cd /workspace/extra/my-playground/src/<name> && claude --dangerously-skip-permissions -p "<specific task or instruction>"
+   ```
 
-5. If it's a web/server project, deploy it (see below).
-6. If it's a Chrome extension, just build it — no deployment needed.
+5. Review the output, iterate if needed by running claude again with follow-up instructions.
+
+6. If it's a web/server project, deploy it (see below).
+7. If it's a Chrome extension, just build it — no deployment needed.
 
 ### Tips for using Claude Code as sub-process
 
@@ -55,15 +102,14 @@ Use Claude Code as a sub-process to build projects — just like a human develop
 - **Break large projects into steps**: run claude multiple times with focused tasks rather than one huge prompt
 - **Use the CLAUDE.md**: Claude Code reads it automatically, so put stable requirements there and use `-p` for specific tasks
 - **Check results**: after each claude run, verify the output before moving to the next step
-- **Commit often**: run `cd <project> && git add -A && git commit -m "description"` between steps
 
 ## Deploying Web Projects
 
-To deploy a web project to `<name>.nocoders.ai`:
+To deploy a web project to `<name>.${DOMAIN}`:
 
 ### 1. Prepare source + Dockerfile
 
-Copy/create the project source and a `Dockerfile` in `/workspace/extra/my-playground/src/<name>/`.
+Create the project source and a `Dockerfile` in `/workspace/extra/my-playground/src/<name>/`.
 
 ### 2. Create compose file
 
@@ -85,7 +131,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.<name>.entrypoints=websecure
-      - traefik.http.routers.<name>.rule=Host(`<name>.nocoders.ai`)
+      - traefik.http.routers.<name>.rule=Host(`<name>.${DOMAIN}`)
       - traefik.http.services.<name>.loadbalancer.server.port=<PORT>
     networks:
       - ingress
@@ -97,7 +143,7 @@ Replace `<name>` with the project name and `<PORT>` with the container's listeni
 ### 3. Deploy
 
 ```bash
-cd /workspace/extra/my-playground && COMPOSE_PROJECT_NAME=<name> docker compose -f <name>.yaml --env-file .env up -d --build
+cd /workspace/extra/my-playground && COMPOSE_PROJECT_NAME=<name> docker compose -f <name>.yaml --env-file src/<name>/.env up -d --build
 ```
 
 ### 4. Verify
@@ -106,14 +152,14 @@ cd /workspace/extra/my-playground && COMPOSE_PROJECT_NAME=<name> docker compose 
 docker ps --filter name=<name>
 ```
 
-The service will be available at `https://<name>.nocoders.ai` (traefik handles TLS via wildcard cert).
+Traefik handles TLS via wildcard cert. Cloudflare Companion auto-creates DNS CNAME records — no manual DNS setup needed.
 
 ## Updating Deployments
 
 To update an existing deployment, rebuild and restart:
 
 ```bash
-cd /workspace/extra/my-playground && COMPOSE_PROJECT_NAME=<name> docker compose -f <name>.yaml --env-file .env up -d --build
+cd /workspace/extra/my-playground && COMPOSE_PROJECT_NAME=<name> docker compose -f <name>.yaml --env-file src/<name>/.env up -d --build
 ```
 
 ## Tearing Down
@@ -122,10 +168,17 @@ cd /workspace/extra/my-playground && COMPOSE_PROJECT_NAME=<name> docker compose 
 cd /workspace/extra/my-playground && COMPOSE_PROJECT_NAME=<name> docker compose -f <name>.yaml down
 ```
 
+## Credentials and Secrets
+
+- **Never** hardcode API keys, tokens, passwords, or domains in source code or compose files
+- Always create `src/<name>/.env` per project — at minimum `DOMAIN=nocoders.ai`
+- Add project-specific secrets there and reference via `${VAR}` in compose files
+- The shared `my-playground/.env` is for infrastructure only (traefik, cloudflare, etc.) — do not use it for project deployments
+
 ## Host Path Mapping
 
-- `/workspace/group/` → `groups/discord_main/` on the host
-- `/workspace/extra/my-playground/` → `~/workdir/my-playground/` on the host
+- `/workspace/group/` → `groups/discord_main/` on the host (agent memory/logs only)
+- `/workspace/extra/my-playground/` → `~/workdir/my-playground/` on the host (all projects + deployments)
 
 ## Docker Access
 
@@ -135,10 +188,124 @@ You have Docker CLI access via the mounted docker socket. You can:
 - Inspect running containers (`docker ps`, `docker logs`)
 - Manage the deployment stack
 
+## File Downloads (FileBrowser)
+
+A FileBrowser instance is running at `https://files.nocoders.ai` serving `/workspace/extra/my-playground/downloads/`.
+
+When a user asks for files (build artifacts, generated files, exports, etc.):
+
+1. Copy the requested files into the downloads directory, organized by project or request:
+   ```bash
+   mkdir -p /workspace/extra/my-playground/downloads/<project-or-topic>
+   cp /workspace/extra/my-playground/src/<project>/path/to/file /workspace/extra/my-playground/downloads/<project-or-topic>/
+   ```
+   For directories or multiple files, use `cp -r` or archive them:
+   ```bash
+   cd /workspace/extra/my-playground/src/<project> && tar czf /workspace/extra/my-playground/downloads/<project-or-topic>/<name>.tar.gz <files-or-dirs>
+   ```
+
+2. Share the download link:
+   - Single file: `https://files.nocoders.ai/api/raw/<project-or-topic>/<filename>?token=` (direct download)
+   - Browse folder: `https://files.nocoders.ai/files/<project-or-topic>/`
+
+3. Clean up old downloads periodically to avoid clutter:
+   ```bash
+   find /workspace/extra/my-playground/downloads/ -mtime +7 -delete 2>/dev/null
+   ```
+
+## Outline (프로젝트 관리)
+
+Outline은 팀 위키 + 프로젝트 관리 도구로 `https://outline.nocoders.ai`에서 실행 중.
+인증은 Authentik OIDC (https://auth.nocoders.ai)를 통해 처리.
+
+### 접근 방법
+- Web UI: https://outline.nocoders.ai
+- API: https://outline.nocoders.ai/api/
+- CLI: `/workspace/group/outline-cli/bin/outline` (Go 바이너리, 범용 CRUD)
+
+### CLI — 범용 CRUD
+
+```bash
+OUTLINE=/workspace/group/outline-cli/bin/outline
+
+# 컬렉션
+$OUTLINE collections list
+$OUTLINE collections create "이름"
+$OUTLINE collections delete ID
+
+# 문서
+$OUTLINE docs list --collection COLL_ID
+$OUTLINE docs create --title "제목" --collection COLL_ID
+$OUTLINE docs update DOC_ID --title "새 제목"
+$OUTLINE docs show DOC_ID
+$OUTLINE docs delete DOC_ID
+
+# 검색
+$OUTLINE search "검색어"
+
+# JSON 출력 (파싱용)
+$OUTLINE docs list --collection COLL_ID --json
+$OUTLINE collections list --json
+```
+
+### 칸반 패턴 (이모지 prefix + 인라인 파싱)
+
+CLI는 CRUD만 제공. 칸반 로직은 그때그때 인라인으로 작성:
+
+```bash
+OUTLINE=/workspace/group/outline-cli/bin/outline
+COLL_ID=60fa3861-441d-4e8c-aa3d-4955063fd5d5
+
+# 상태별 보드 보기
+$OUTLINE docs list --collection $COLL_ID --json | python3 -c "
+import sys,json
+STATUS={'📋':'TODO','🔄':'IN PROGRESS','👀':'REVIEW','✅':'DONE','🚫':'BLOCKED'}
+docs=json.load(sys.stdin)
+groups={}
+for d in docs:
+    s=STATUS.get(d['title'][0],'OTHER')
+    groups.setdefault(s,[]).append(d)
+for s,items in groups.items():
+    print(f'\n{s} ({len(items)})')
+    for i in items: print(f'  [{i[\"id\"][:8]}] {i[\"title\"]}')
+"
+
+# 상태 변경 (todo → progress)
+DOC_ID=abc12345
+OLD_TITLE=$($OUTLINE docs show $DOC_ID --json | python3 -c "import sys,json; print(json.load(sys.stdin)['title'])")
+NEW_TITLE="🔄 ${OLD_TITLE#* }"  # 이모지 교체
+$OUTLINE docs update $DOC_ID --title "$NEW_TITLE"
+```
+
+### 상태 이모지
+| 상태 | 이모지 |
+|------|--------|
+| Todo | 📋 |
+| In Progress | 🔄 |
+| Review | 👀 |
+| Done | ✅ |
+| Blocked | 🚫 |
+
+### 기본 설정
+- URL: https://outline.nocoders.ai
+- API Token: `/workspace/group/outline-cli/config.json`에 저장
+- 기본 프로젝트 컬렉션 ID: `60fa3861-441d-4e8c-aa3d-4955063fd5d5`
+
+### Outline 서버 관리
+```bash
+docker ps --filter name=outline
+docker logs outline --tail 50
+cd /workspace/extra/my-playground && COMPOSE_PROJECT_NAME=outline docker compose -f outline.yaml --env-file src/outline/.env restart
+```
+
+### 주의사항
+- CLI는 범용 CRUD만 — 고수준 로직은 인라인 스크립트로 그때그때 작성
+- 토큰 효율을 위해 항상 CLI 사용 권장 (web UI 브라우징 금지)
+
 ## Guidelines
 
-- Always use git init in new projects for version control
 - Keep projects self-contained with their own Dockerfile when deploying
-- Use the `.env` file in my-playground for shared environment variables (DOMAIN, etc.)
+- Each project gets its own `.env` — never share env files between projects
 - Name compose services and routers consistently with the project name
 - Test locally with `docker compose` before declaring the deployment done
+- Use `${DOMAIN}` in Host rules — never hardcode the domain
