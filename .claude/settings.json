@@ -1,6 +1,7 @@
 {
   "enabledPlugins": {
     "skill-creator@claude-plugins-official": true,
-    "claude-md-management@claude-plugins-official": true
+    "claude-md-management@claude-plugins-official": true,
+    "techlead@techlead-marketplace": true
   }
 }
