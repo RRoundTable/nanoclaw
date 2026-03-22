@@ -130,9 +130,7 @@ function createSchema(database: Database.Database): void {
 
   // Add channel_name column if it doesn't exist (identifies which channel instance owns this group)
   try {
-    database.exec(
-      `ALTER TABLE registered_groups ADD COLUMN channel_name TEXT`,
-    );
+    database.exec(`ALTER TABLE registered_groups ADD COLUMN channel_name TEXT`);
   } catch {
     /* column already exists */
   }

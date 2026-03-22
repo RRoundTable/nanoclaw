@@ -30,7 +30,11 @@ export class DiscordChannel implements Channel {
   private opts: DiscordChannelOpts;
   private botToken: string;
 
-  constructor(botToken: string, opts: DiscordChannelOpts, channelName = 'discord') {
+  constructor(
+    botToken: string,
+    opts: DiscordChannelOpts,
+    channelName = 'discord',
+  ) {
     this.botToken = botToken;
     this.opts = opts;
     this.name = channelName;

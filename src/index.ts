@@ -174,7 +174,10 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   // For non-main groups, check if trigger is required and present
   if (!isMainGroup && group.requiresTrigger !== false) {
     const groupTriggerPattern = group.assistantName
-      ? new RegExp(`^@${group.assistantName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+      ? new RegExp(
+          `^@${group.assistantName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+          'i',
+        )
       : TRIGGER_PATTERN;
     const allowlistCfg = loadSenderAllowlist();
     const hasTrigger = missedMessages.some(
@@ -405,7 +408,10 @@ async function startMessageLoop(): Promise<void> {
           // context when a trigger eventually arrives.
           if (needsTrigger) {
             const groupTriggerPattern = group.assistantName
-              ? new RegExp(`^@${group.assistantName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+              ? new RegExp(
+                  `^@${group.assistantName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+                  'i',
+                )
               : TRIGGER_PATTERN;
             const allowlistCfg = loadSenderAllowlist();
             const hasTrigger = groupMessages.some(
