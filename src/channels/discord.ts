@@ -24,15 +24,16 @@ export interface DiscordChannelOpts {
 }
 
 export class DiscordChannel implements Channel {
-  name = 'discord';
+  name: string;
 
   private client: Client | null = null;
   private opts: DiscordChannelOpts;
   private botToken: string;
 
-  constructor(botToken: string, opts: DiscordChannelOpts) {
+  constructor(botToken: string, opts: DiscordChannelOpts, channelName = 'discord') {
     this.botToken = botToken;
     this.opts = opts;
+    this.name = channelName;
   }
 
   async connect(): Promise<void> {
@@ -85,9 +86,16 @@ export class DiscordChannel implements Channel {
           content = content
             .replace(new RegExp(`<@!?${botId}>`, 'g'), '')
             .trim();
+          // Use per-group assistant name if set, otherwise global
+          const group = this.opts.registeredGroups()[chatJid];
+          const triggerName = group?.assistantName || ASSISTANT_NAME;
+          const triggerRe = new RegExp(
+            `^@${triggerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+            'i',
+          );
           // Prepend trigger if not already present
-          if (!TRIGGER_PATTERN.test(content)) {
-            content = `@${ASSISTANT_NAME} ${content}`;
+          if (!triggerRe.test(content)) {
+            content = `@${triggerName} ${content}`;
           }
         }
       }
@@ -227,7 +235,19 @@ export class DiscordChannel implements Channel {
   }
 
   ownsJid(jid: string): boolean {
-    return jid.startsWith('dc:');
+    if (!jid.startsWith('dc:')) return false;
+    // When multiple Discord bots coexist, check the registered group's channelName
+    // to determine which bot instance owns this JID.
+    const group = this.opts.registeredGroups()[jid];
+    if (group?.channelName) {
+      return group.channelName === this.name;
+    }
+    // Fallback: check channel cache for groups without explicit channelName
+    if (this.client?.isReady()) {
+      const channelId = jid.replace(/^dc:/, '');
+      return this.client.channels.cache.has(channelId);
+    }
+    return true;
   }
 
   async disconnect(): Promise<void> {
@@ -260,5 +280,15 @@ registerChannel('discord', (opts: ChannelOpts) => {
     logger.warn('Discord: DISCORD_BOT_TOKEN not set');
     return null;
   }
-  return new DiscordChannel(token, opts);
+  return new DiscordChannel(token, opts, 'discord');
+});
+
+registerChannel('discord2', (opts: ChannelOpts) => {
+  const envVars = readEnvFile(['DISCORD_BOT_TOKEN_2']);
+  const token =
+    process.env.DISCORD_BOT_TOKEN_2 || envVars.DISCORD_BOT_TOKEN_2 || '';
+  if (!token) {
+    return null;
+  }
+  return new DiscordChannel(token, opts, 'discord2');
 });

@@ -41,6 +41,8 @@ export interface RegisteredGroup {
   containerConfig?: ContainerConfig;
   requiresTrigger?: boolean; // Default: true for groups, false for solo chats
   isMain?: boolean; // True for the main control group (no trigger, elevated privileges)
+  assistantName?: string; // Per-group assistant name override (defaults to global ASSISTANT_NAME)
+  channelName?: string; // Which channel instance owns this group (e.g., 'discord' vs 'discord2')
 }
 
 export interface NewMessage {
