@@ -80,19 +80,40 @@ export class DiscordChannel implements Channel {
       // when the bot is @mentioned.
       if (this.client?.user) {
         const botId = this.client.user.id;
+        const group = this.opts.registeredGroups()[chatJid];
+        const triggerName = group?.assistantName || ASSISTANT_NAME;
+
         const isBotMentioned =
           message.mentions.users.has(botId) ||
           content.includes(`<@${botId}>`) ||
           content.includes(`<@!${botId}>`);
 
-        if (isBotMentioned) {
-          // Strip the <@botId> mention to avoid visual clutter
-          content = content
-            .replace(new RegExp(`<@!?${botId}>`, 'g'), '')
-            .trim();
-          // Use per-group assistant name if set, otherwise global
-          const group = this.opts.registeredGroups()[chatJid];
-          const triggerName = group?.assistantName || ASSISTANT_NAME;
+        // Also detect role mentions (<@&roleId>) where the role name
+        // matches the assistant name — Discord converts @pm to a role
+        // mention when a role named "pm" exists.
+        const isRoleMentionTrigger =
+          !isBotMentioned &&
+          message.mentions.roles?.some(
+            (role) => role.name.toLowerCase() === triggerName.toLowerCase(),
+          );
+
+        if (isBotMentioned || isRoleMentionTrigger) {
+          if (isBotMentioned) {
+            // Strip the <@botId> mention to avoid visual clutter
+            content = content
+              .replace(new RegExp(`<@!?${botId}>`, 'g'), '')
+              .trim();
+          }
+          if (isRoleMentionTrigger) {
+            // Strip the role mention(s) that matched the trigger
+            message.mentions.roles.forEach((role) => {
+              if (role.name.toLowerCase() === triggerName.toLowerCase()) {
+                content = content
+                  .replace(new RegExp(`<@&${role.id}>`, 'g'), '')
+                  .trim();
+              }
+            });
+          }
           const triggerRe = new RegExp(
             `^@${triggerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
             'i',
@@ -153,8 +174,11 @@ export class DiscordChannel implements Channel {
         isGroup,
       );
 
-      // Only deliver full message for registered groups
+      // Only deliver full message for registered groups owned by this bot.
+      // When multiple Discord bots coexist, skip messages for groups
+      // that belong to a different bot (based on channelName).
       const group = this.opts.registeredGroups()[chatJid];
+      if (group?.channelName && group.channelName !== this.name) return;
       if (!group) {
         logger.debug(
           { chatJid, chatName },

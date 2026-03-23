@@ -221,12 +221,12 @@ Outline은 팀 위키 + 프로젝트 관리 도구로 `https://outline.nocoders.
 ### 접근 방법
 - Web UI: https://outline.nocoders.ai
 - API: https://outline.nocoders.ai/api/
-- CLI: `/workspace/group/outline-cli/bin/outline` (Go 바이너리, 범용 CRUD)
+- CLI: `/workspace/extra/outline-cli/bin/outline` (Go 바이너리, 범용 CRUD)
 
 ### CLI — 범용 CRUD
 
 ```bash
-OUTLINE=/workspace/group/outline-cli/bin/outline
+OUTLINE=/workspace/extra/outline-cli/bin/outline
 
 # 컬렉션
 $OUTLINE collections list
@@ -248,47 +248,37 @@ $OUTLINE docs list --collection COLL_ID --json
 $OUTLINE collections list --json
 ```
 
-### 칸반 패턴 (이모지 prefix + 인라인 파싱)
+### 문서 구조 (하위 문서 패턴)
 
-CLI는 CRUD만 제공. 칸반 로직은 그때그때 인라인으로 작성:
+PM 에이전트와 같은 컬렉션을 공유. 최상위 문서는 카테고리, 하위 문서는 개별 항목:
 
-```bash
-OUTLINE=/workspace/group/outline-cli/bin/outline
-COLL_ID=60fa3861-441d-4e8c-aa3d-4955063fd5d5
-
-# 상태별 보드 보기
-$OUTLINE docs list --collection $COLL_ID --json | python3 -c "
-import sys,json
-STATUS={'📋':'TODO','🔄':'IN PROGRESS','👀':'REVIEW','✅':'DONE','🚫':'BLOCKED'}
-docs=json.load(sys.stdin)
-groups={}
-for d in docs:
-    s=STATUS.get(d['title'][0],'OTHER')
-    groups.setdefault(s,[]).append(d)
-for s,items in groups.items():
-    print(f'\n{s} ({len(items)})')
-    for i in items: print(f'  [{i[\"id\"][:8]}] {i[\"title\"]}')
-"
-
-# 상태 변경 (todo → progress)
-DOC_ID=abc12345
-OLD_TITLE=$($OUTLINE docs show $DOC_ID --json | python3 -c "import sys,json; print(json.load(sys.stdin)['title'])")
-NEW_TITLE="🔄 ${OLD_TITLE#* }"  # 이모지 교체
-$OUTLINE docs update $DOC_ID --title "$NEW_TITLE"
+```
+컬렉션
+├── PRD/           → PM이 작성/관리
+├── Roadmap/       → PM이 작성/관리
+├── Sprint/        → PM이 생성, Dev가 읽고 수행
+│   ├── Sprint 1   (태스크 체크리스트)
+│   └── Sprint 2
+└── Backlog/       → PM이 관리
 ```
 
-### 상태 이모지
-| 상태 | 이모지 |
-|------|--------|
-| Todo | 📋 |
-| In Progress | 🔄 |
-| Review | 👀 |
-| Done | ✅ |
-| Blocked | 🚫 |
+```bash
+OUTLINE=/workspace/extra/outline-cli/bin/outline
+COLL_ID=60fa3861-441d-4e8c-aa3d-4955063fd5d5
+
+# 스프린트 목록 보기
+$OUTLINE docs children SPRINT_DOC_ID
+
+# 문서 보기
+$OUTLINE docs show DOC_ID
+
+# 하위 문서 생성
+$OUTLINE docs create --title "제목" --collection $COLL_ID --parent PARENT_DOC_ID
+```
 
 ### 기본 설정
 - URL: https://outline.nocoders.ai
-- API Token: `/workspace/group/outline-cli/config.json`에 저장
+- API Token: `/workspace/extra/outline-cli/config.json`에 저장
 - 기본 프로젝트 컬렉션 ID: `60fa3861-441d-4e8c-aa3d-4955063fd5d5`
 
 ### Outline 서버 관리
@@ -297,6 +287,34 @@ docker ps --filter name=outline
 docker logs outline --tail 50
 cd /workspace/extra/my-playground && COMPOSE_PROJECT_NAME=outline docker compose -f outline.yaml --env-file src/outline/.env restart
 ```
+
+### 문서 구조 점검 (자동)
+
+작업 시작 시 Outline 문서 구조를 자동으로 점검하고 정리한다.
+
+```bash
+# 1. 컬렉션의 최상위 문서 목록 가져오기
+$OUTLINE docs list --collection $COLL_ID --json
+
+# 2. 각 카테고리의 하위 문서 확인
+$OUTLINE docs children CATEGORY_DOC_ID --json
+```
+
+**자동 감지 및 정리 항목:**
+- 고아 문서 (카테고리 밖의 최상위 문서) → 올바른 카테고리 아래로 이동
+- 빈 카테고리 (하위 문서 없음, 내용 없음) → 삭제
+- 중복 카테고리 → 병합 후 삭제
+- 3단계 이상 중첩 → 2단계로 평탄화 (카테고리 → 항목)
+- 완료된 스프린트 (모든 태스크 체크) → 제목에 `[Done]` 추가
+
+### 진행 기록
+
+태스크 완료 시 Outline 문서에 직접 기록:
+
+1. 스프린트 문서에서 해당 태스크를 `[x]`로 체크
+2. 날짜를 함께 기록: `- [x] Task — done (2026-03-23)`
+3. `## Progress Log` 섹션에 한 줄 요약 추가 (추가만, 덮어쓰기 금지)
+4. 모든 태스크 완료 시 문서 제목에 `[Done]` 추가
 
 ### 주의사항
 - CLI는 범용 CRUD만 — 고수준 로직은 인라인 스크립트로 그때그때 작성
