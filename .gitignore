@@ -22,6 +22,10 @@ groups/global/*
 *.keys.json
 .env
 
+# Tools — track source, ignore binaries and credentials
+tools/*/bin/
+tools/*/config.json
+
 # Temp files
 .tmp-*
 
