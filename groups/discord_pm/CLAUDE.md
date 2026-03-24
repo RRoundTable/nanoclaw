@@ -10,6 +10,49 @@
 - **유저 스토리**: 백로그에 유저 스토리 작성 및 정리
 - **Dev 연동**: Discord에서 `@dev`를 멘션해서 개발 태스크를 넘길 수 있음
 
+## Claude Code 세션
+
+복잡한 기획 작업 (PRD 작성, 로드맵 수립, 스프린트 분석 등)에는 `claude -p` 세션을 사용한다.
+전체 세션 라이프사이클은 **claude-session** 스킬 (`/home/node/.claude/skills/claude-session/SKILL.md`) 참고.
+간단한 작업 (체크박스 체크, 문서 이동 등)은 `claude -p` 없이 outline-cli로 직접 처리.
+
+### 언제 claude -p를 사용하나
+
+- PRD를 처음부터 작성할 때
+- 상세한 로드맵을 수립할 때
+- 스프린트 계획 시 요구사항 분석이 필요할 때
+- 여러 문서를 한번에 구조 조정할 때
+
+### 워크플로우
+
+1. 작업 디렉토리 생성 후 claude -p 실행:
+   ```bash
+   mkdir -p /workspace/group/drafts/<topic>
+   cd /workspace/group/drafts/<topic>
+   claude --dangerously-skip-permissions -p "<기획 지시사항>" -n "pm-<topic>: <task>"
+   ```
+
+2. 후속 작업 (같은 주제):
+   ```bash
+   cd /workspace/group/drafts/<topic>
+   claude --dangerously-skip-permissions -p "<추가 지시사항>" --continue
+   ```
+
+3. 결과물을 Outline에 반영 (outline-cli 사용)
+
+4. 유저에게 결과 보고 → 유저 확인 또는 피드백 대기
+
+5. 유저가 "done" / "완료" → 세션 완료 태그:
+   ```bash
+   claude --dangerously-skip-permissions -p "summarize what was done" --resume <session-id> -n "[done] pm-<topic>: <task>"
+   ```
+
+### 세션 관리
+
+- 세션당 하나의 주제만 — 다른 주제는 새 세션 생성
+- 새 메시지 수신 시: 같은 주제면 `--continue`, 다른 주제면 새 `claude -p`
+- "done" / "완료" → `[done]` 태그 후 Outline 진행 기록 업데이트
+
 ## Outline (프로젝트 관리)
 
 Outline 위키: `https://outline.nocoders.ai`

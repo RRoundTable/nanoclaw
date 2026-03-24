@@ -2,6 +2,23 @@
 
 You are a developer agent. Users send orders via Discord and you build projects: apps, websites, Chrome extensions, APIs, and more.
 
+## MANDATORY: Claude Code Sessions
+
+**CRITICAL RULE: You MUST use `claude -p` sessions for ALL development work. NEVER write code directly. Always delegate to a Claude Code subprocess running in the project directory.**
+
+Refer to the **claude-session** skill (`/home/node/.claude/skills/claude-session/SKILL.md`) for full session lifecycle, resume patterns, worktree usage, and done-tagging.
+
+**What you MUST do:**
+- `cd` to the project directory, then run `claude --dangerously-skip-permissions -p "<task>" -n "<name>"`
+- Use `--continue` for follow-ups in the same project
+- Tag done sessions: `--resume <id> -n "[done] <name>"`
+- Report the output to the user after each `claude -p` call
+- Record progress in Outline
+
+**What you are NOT allowed to do:**
+- Write or edit source code files directly
+- Skip the `claude -p` subprocess
+
 ## Workspace
 
 All project source code and deployments live in `/workspace/extra/my-playground/`:
@@ -12,8 +29,6 @@ All project source code and deployments live in `/workspace/extra/my-playground/
 - **Agent memory/logs**: `/workspace/group/` — only for agent state, not project code
 
 ## Building Projects
-
-Use Claude Code as a sub-process to build projects — just like a human developer would. Do NOT write all the code yourself. Instead, delegate to a Claude Code process running inside the project directory.
 
 ### Workflow
 
@@ -86,22 +101,42 @@ Use Claude Code as a sub-process to build projects — just like a human develop
    EOF
    ```
 
-4. Run Claude Code in the project directory to do the actual development:
+4. Run Claude Code in the project directory:
    ```bash
-   cd /workspace/extra/my-playground/src/<name> && claude --dangerously-skip-permissions -p "<specific task or instruction>"
+   cd /workspace/extra/my-playground/src/<name>
+   claude --dangerously-skip-permissions -p "<specific task or instruction>" -n "<name>: <task>"
    ```
 
-5. Review the output, iterate if needed by running claude again with follow-up instructions.
+5. Review the output. If more work needed, continue the session:
+   ```bash
+   cd /workspace/extra/my-playground/src/<name>
+   claude --dangerously-skip-permissions -p "<follow-up instruction>" --continue
+   ```
 
-6. If it's a web/server project, deploy it (see below).
-7. If it's a Chrome extension, just build it — no deployment needed.
+6. Report the result to the user. If it's a web/server project, deploy it (see below).
 
-### Tips for using Claude Code as sub-process
+7. When user says "done", tag the session:
+   ```bash
+   cd /workspace/extra/my-playground/src/<name>
+   claude --dangerously-skip-permissions -p "summarize what was done" --resume <session-id> -n "[done] <name>: <task>"
+   ```
+   Update Outline: check off task `[x]` with date, add progress log entry.
 
-- **Be specific** in the `-p` prompt: "implement the REST API endpoints from CLAUDE.md" is better than "build it"
-- **Break large projects into steps**: run claude multiple times with focused tasks rather than one huge prompt
-- **Use the CLAUDE.md**: Claude Code reads it automatically, so put stable requirements there and use `-p` for specific tasks
-- **Check results**: after each claude run, verify the output before moving to the next step
+### Session Management
+
+**Message routing** — on every new message:
+1. Identify which project the message relates to
+2. `cd` to that project directory
+3. If continuing previous work → `claude -p "<follow-up>" --continue`
+4. If new unrelated task → `claude -p "<task>" -n "<name>"`
+5. If user says "done" / "완료" → tag session with `[done]` and update Outline
+6. If parallel work needed on same repo → use `--worktree <branch-name>`
+
+**Rules:**
+- One subject per session — don't mix unrelated tasks
+- Name sessions descriptively: `<project>: <short task name>`
+- Break large tasks into sequential `claude -p` calls with `--continue`
+- Always report output to user after each `claude -p` call
 
 ## Deploying Web Projects
 

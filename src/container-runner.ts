@@ -140,6 +140,8 @@ function buildVolumeMounts(
             // https://code.claude.com/docs/en/memory#manage-auto-memory
             CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0',
           },
+          // Skip first-run theme selection prompt (needed for claude CLI in tmux sessions)
+          hasCompletedOnboarding: true,
         },
         null,
         2,
