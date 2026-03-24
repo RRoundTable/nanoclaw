@@ -52,31 +52,66 @@ YT_COLL="b8020d33-e643-4edc-8973-165348923e00"   # 📺 YouTube 채널
 
 ### 문서 구조
 
-YouTube 컬렉션 내 디렉터 전용 카테고리:
+YouTube 컬렉션의 프로덕션 베이스캠프 구조:
 
 ```
 📺 YouTube 채널 (b8020d33)
-├── PRD/           → PM 관리
-├── Roadmap/       → PM 관리
-├── Sprint/        → PM 관리
-├── Backlog/       → PM 관리
-├── Scripts/       → 디렉터 관리
-│   ├── 숏폼 대본
-│   └── 롱폼 대본
-├── Analysis/      → 디렉터 관리
-│   ├── 바이럴 분석
-│   └── 밈 리서치
-└── Hooks/         → 디렉터 관리
+├── PRD/                    → PM 관리
+├── Roadmap/                → PM 관리
+├── Sprint/                 → PM 관리
+├── Backlog/                → PM 관리
+├── 📌 공지사항 및 퀵 링크/  → 디렉터 관리 (브랜드 가이드, 에셋, 크루 연락망)
+├── 🚀 콘텐츠 파이프라인/    → 디렉터 관리 (칸반 보드)
+│   ├── 💡 아이디어 뱅크
+│   ├── 📝 기획 및 대본 작성 중
+│   ├── 🎬 촬영 대기/진행 중
+│   ├── ✂️ 후반 작업
+│   └── ✅ 업로드 완료
+├── Analysis/               → 디렉터 관리 (바이럴 분석, 밈 리서치)
+└── Hooks/                  → 디렉터 관리 (훅 아이디어)
 ```
 
-첫 세션 시작 시 위 카테고리가 없으면 생성:
+첫 세션 시작 시 위 카테고리가 없으면 생성. 파이프라인의 각 단계는 하위 문서로 에피소드 기획안을 배치.
+
+### 초기 셋업 (최초 1회)
+
 ```bash
-# Scripts 카테고리 생성
-$OUTLINE docs create --title "Scripts" --collection $YT_COLL
-# Analysis 카테고리 생성
+# 공지사항 및 퀵 링크
+$OUTLINE docs create --title "📌 공지사항 및 퀵 링크" --collection $YT_COLL --text "## 브랜드 가이드라인
+[링크 삽입] (톤앤매너, 로고, 금칙어 등)
+
+## 에셋 라이브러리
+[링크 삽입] (자주 쓰는 BGM, 효과음 폴더)
+
+## 크루 연락망
+[링크 삽입] (내/외부 스태프 연락처)"
+
+# 콘텐츠 파이프라인 (메인 카테고리)
+$OUTLINE docs create --title "🚀 콘텐츠 파이프라인" --collection $YT_COLL
+# 파이프라인 하위 단계 (PIPELINE_ID = 위에서 생성한 문서 UUID)
+$OUTLINE docs create --title "💡 아이디어 뱅크" --collection $YT_COLL --parent PIPELINE_ID
+$OUTLINE docs create --title "📝 기획 및 대본 작성 중" --collection $YT_COLL --parent PIPELINE_ID
+$OUTLINE docs create --title "🎬 촬영 대기/진행 중" --collection $YT_COLL --parent PIPELINE_ID
+$OUTLINE docs create --title "✂️ 후반 작업" --collection $YT_COLL --parent PIPELINE_ID
+$OUTLINE docs create --title "✅ 업로드 완료" --collection $YT_COLL --parent PIPELINE_ID
+
+# Analysis 카테고리
 $OUTLINE docs create --title "Analysis" --collection $YT_COLL
-# Hooks 카테고리 생성
+
+# Hooks 카테고리
 $OUTLINE docs create --title "Hooks" --collection $YT_COLL
+```
+
+### 에피소드 이동 (파이프라인 진행)
+
+Outline API는 reparenting을 지원하지 않으므로, 단계 이동 시 문서를 삭제 후 다음 단계 아래에 재생성:
+```bash
+# 현재 문서 내용 읽기
+CONTENT=$($OUTLINE docs show EP_DOC_ID)
+# 현재 문서 삭제
+$OUTLINE docs delete EP_DOC_ID
+# 다음 단계 아래에 재생성
+$OUTLINE docs create --title "[EP.XX] 제목" --collection $YT_COLL --parent NEXT_STAGE_ID --text "$CONTENT"
 ```
 
 ### 주요 명령어
@@ -103,9 +138,58 @@ $OUTLINE search "검색어"
 2. 분석 문서에 날짜 + 핵심 인사이트 요약
 3. `## Progress Log` 섹션에 한 줄 요약 추가 (추가만, 덮어쓰기 금지)
 
-## 대본 작성 가이드
+## 에피소드 기획안 템플릿
 
-### 숏폼 대본 템플릿 (15-60초)
+새 에피소드 생성 시 아래 템플릿으로 문서를 만든다. 파이프라인의 해당 단계 아래에 하위 문서로 생성.
+
+```bash
+$OUTLINE docs create --title "[EP.XX] 영상 가제" --collection $YT_COLL --parent STAGE_ID --text "$(cat <<'TEMPLATE'
+## 📋 기본 정보
+- **발행 예정일**: 202X년 X월 X일
+- **담당 기획자/디렉터**:
+- **콘텐츠 목표**: (예: 조회수 5만 회 달성, 신규 구독자 유입, 특정 제품 협찬 노출 등)
+- **타겟 시청자**: (예: 2030 사회초년생)
+
+## 🧲 핵심 후킹 (Thumbnail & Title)
+- **기획 의도 (1줄 요약)**:
+- **썸네일 텍스트/이미지 스케치**: (시각적으로 어떻게 보일지 묘사)
+- **제목 후보군 (A/B 테스트용)**:
+  - 후보 1:
+  - 후보 2:
+  - 후보 3:
+
+## 🎥 촬영 구성안 (Storyboard & Script)
+- **장소 및 일시**:
+- **출연진/준비물**:
+- **[0:00 ~ 0:15] 오프닝 (Hook)**: (시청자 이탈을 막을 가장 강력한 멘트나 장면)
+- **[0:15 ~ 본론] 세부 구성**:
+  - Scene 1:
+  - Scene 2:
+  - Scene 3:
+- **[클로징 & CTA]**: (구독/좋아요 유도 및 다음 영상 예고)
+
+## ✂️ 편집 가이드 (For 편집자)
+- **전체적인 톤앤매너**: (예: 빠르고 경쾌하게, 예능 자막 많이)
+- **레퍼런스 영상 링크**: [링크 삽입] (이 영상의 2:15초 느낌 참고해 주세요)
+- **특이사항**: (예: 03:10~03:20 구간은 오디오 불량 주의, BGM으로 덮어주세요)
+
+## ✅ 진행 체크리스트
+- [ ] 대본 및 기획안 확정
+- [ ] 장소 대관 및 출연자 섭외 완료
+- [ ] 촬영 장비 세팅 및 체크
+- [ ] 촬영 완료 및 원본 소스 백업
+- [ ] 편집자 1차 가편집본 수령 및 피드백 전달
+- [ ] 썸네일 디자인 확정
+- [ ] 최종본 업로드 및 메타데이터(태그, 설명) 작성
+
+## Progress Log
+TEMPLATE
+)"
+```
+
+### 숏폼 대본 (간소화 버전)
+
+숏폼(15-60초)은 에피소드 기획안 대신 간소화 템플릿 사용:
 
 ```markdown
 # [제목]
@@ -114,7 +198,7 @@ $OUTLINE search "검색어"
 [시청자가 스크롤을 멈추게 만드는 첫 문장/장면]
 
 ## 전개 (3-40초)
-[핵심 메시지 전달. 짧고 임팩트 있게]
+[핵심 메시지. 짧고 임팩트 있게]
 - 포인트 1
 - 포인트 2
 - 포인트 3
@@ -127,35 +211,6 @@ $OUTLINE search "검색어"
 - B-roll: [필요한 보조 영상]
 - 자막: [강조할 텍스트]
 - 음악: [분위기/BPM]
-```
-
-### 롱폼 대본 템플릿 (8-20분)
-
-```markdown
-# [제목]
-
-## 인트로 훅 (0-30초)
-[시청자가 영상을 끝까지 볼 이유를 제시]
-
-## 챕터 1: [소제목] (X:XX-X:XX)
-[내용]
-### 촬영 노트
-- [구도, B-roll, 트랜지션]
-
-## 챕터 2: [소제목] (X:XX-X:XX)
-[내용]
-
-## 챕터 3: [소제목] (X:XX-X:XX)
-[내용]
-
-## 아웃트로 (마지막 30초)
-[요약 + CTA + 다음 영상 예고]
-
-## 전체 촬영 노트
-- 예상 촬영 시간:
-- 필요 장비:
-- 로케이션:
-- B-roll 목록:
 ```
 
 ## 바이럴 분석 프레임워크
