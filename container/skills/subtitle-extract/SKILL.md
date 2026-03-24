@@ -8,6 +8,13 @@ allowed-tools: Bash(yt-dlp:*), Bash(curl:*), Bash(cat:*), Bash(ffmpeg:*)
 
 Extract subtitles from video URLs using yt-dlp. Falls back to Whisper API when no subtitles exist.
 
+## Setup
+
+Source the API key before using Whisper:
+```bash
+source /workspace/group/.env
+```
+
 ## Quick Reference
 
 ```bash
@@ -16,6 +23,7 @@ yt-dlp --write-auto-sub --write-sub --sub-lang ko,en --skip-download --sub-forma
 cat /tmp/subs/*.vtt
 
 # Instagram/YouTube — download audio + transcribe with Whisper API
+source /workspace/group/.env
 yt-dlp -x --audio-format mp3 --audio-quality 5 -o "/tmp/audio/%(title)s.%(ext)s" "URL"
 curl -s https://api.openai.com/v1/audio/transcriptions \
   -H "Authorization: Bearer $OPENAI_API_KEY" \
