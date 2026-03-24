@@ -43,6 +43,13 @@
 
 Outline 위키: `https://outline.nocoders.ai`
 
+### 환경 변수
+
+API 키는 `/workspace/group/.env`에 저장. Whisper 등 외부 API 호출 전 반드시 source:
+```bash
+source /workspace/group/.env   # OPENAI_API_KEY 등
+```
+
 ### CLI 접근
 
 ```bash
