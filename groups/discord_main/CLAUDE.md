@@ -189,6 +189,34 @@ docker ps --filter name=<name>
 
 Traefik handles TLS via wildcard cert. Cloudflare Companion auto-creates DNS CNAME records — no manual DNS setup needed.
 
+### ⚠️ Cloudflare DNS 주의사항
+
+Companion이 자동 생성한 CNAME 레코드가 **Error 1000**을 일으킬 수 있음. 배포 후 접속 안 되면 DNS 확인:
+
+```bash
+CF_TOKEN="..."  # docker inspect cloudflare-companion 에서 CF_TOKEN 확인
+ZONE_ID="..."   # 동일하게 DOMAIN1_ZONE_ID 확인
+SERVER_IP="112.144.114.137"  # 실제 서버 IP (vocab-app 등 정상 작동 서비스와 동일)
+
+# 1. 문제 확인: CNAME이 proxied=true로 생성됐거나, nocoders.ai 루트가 잘못된 IP를 가리키는 경우
+# creator-dashboard.nocoders.ai 레코드 확인
+curl -s "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?name=<name>.nocoders.ai" \
+  -H "Authorization: Bearer ${CF_TOKEN}" | python3 -c "
+import json,sys; [print(r['type'], r['content'], 'proxied:', r['proxied']) for r in json.load(sys.stdin)['result']]"
+
+# 2. 수정: CNAME 삭제 후 A 레코드로 재등록 (proxied: false)
+RECORD_ID="..."  # 위 조회에서 확인한 ID
+curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${RECORD_ID}" \
+  -H "Authorization: Bearer ${CF_TOKEN}"
+
+curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records" \
+  -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+  --data "{\"type\":\"A\",\"name\":\"<name>.nocoders.ai\",\"content\":\"${SERVER_IP}\",\"proxied\":false,\"ttl\":60}"
+```
+
+**원인**: `DOMAIN1_PROXIED=true` 설정으로 Companion이 CNAME을 proxied로 생성 → `nocoders.ai` 루트 A레코드가 Cloudflare IP로 잘못 등록돼 있을 경우 루프 발생 → Error 1000.
+**해결 원칙**: 새 서비스는 항상 **A 레코드 + proxied: false + 실제 서버 IP** 조합 사용.
+
 ## Updating Deployments
 
 To update an existing deployment, rebuild and restart:

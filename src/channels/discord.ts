@@ -320,3 +320,13 @@ registerChannel('discord2', (opts: ChannelOpts) => {
   }
   return new DiscordChannel(token, opts, 'discord2');
 });
+
+registerChannel('discord3', (opts: ChannelOpts) => {
+  const envVars = readEnvFile(['DISCORD_BOT_TOKEN_3']);
+  const token =
+    process.env.DISCORD_BOT_TOKEN_3 || envVars.DISCORD_BOT_TOKEN_3 || '';
+  if (!token) {
+    return null;
+  }
+  return new DiscordChannel(token, opts, 'discord3');
+});
